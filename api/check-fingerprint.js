@@ -30,21 +30,24 @@ export default async function handler(req, res) {
     // Check for exact match first
     let blocked = bannedIds.includes(visitorId);
     
-    // If not blocked, check for partial matches to handle format changes
+    // If not blocked, check for end part (custom fingerprint) matches
     if (!blocked && visitorId.includes('-')) {
-      // Extract the FingerprintJS part (before the first dash)
-      const fpjsPart = visitorId.split('-')[0];
+      // Extract the custom fingerprint part (after the last dash)
+      const customPart = visitorId.split('-').pop();
       
-      // Check if the FingerprintJS part is banned
+      // Check if any banned ID has the same custom fingerprint part
       blocked = bannedIds.some(bannedId => {
-        // Check if banned ID matches the FingerprintJS part
-        return bannedId === fpjsPart || bannedId.startsWith(fpjsPart + '-');
+        if (bannedId.includes('-')) {
+          const bannedCustomPart = bannedId.split('-').pop();
+          return bannedCustomPart === customPart;
+        }
+        return false;
       });
     }
     
     // Optional: Log for monitoring (remove in production if not needed)
     if (blocked) {
-      console.log(`Blocked access for ID: ${visitorId}`);
+      console.log(`Blocked access for ID: ${visitorId} (e)`);
     }
     
     return res.status(200).json({ blocked });
@@ -53,34 +56,4 @@ export default async function handler(req, res) {
     console.error("Error checking fingerprint:", error);
     return res.status(500).json({ error: "Server error" });
   }
-}
-
-// Alternative: More robust partial matching function
-function isIdBanned(visitorId, bannedIds) {
-  // Direct match
-  if (bannedIds.includes(visitorId)) {
-    return true;
-  }
-  
-  // If visitorId has enhanced format (contains dash)
-  if (visitorId.includes('-')) {
-    const fpjsPart = visitorId.split('-')[0];
-    
-    // Check if the base FingerprintJS ID is banned
-    return bannedIds.some(bannedId => {
-      // Exact match of base part
-      if (bannedId === fpjsPart) return true;
-      
-      // Match base part of banned ID (if it also has enhanced format)
-      if (bannedId.includes('-')) {
-        const bannedFpjsPart = bannedId.split('-')[0];
-        return bannedFpjsPart === fpjsPart;
-      }
-      
-      return false;
-    });
-  }
-  
-  // For fallback IDs, only exact match
-  return false;
 }
