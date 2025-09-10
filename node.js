@@ -1,22 +1,19 @@
-// server.js
-const WebSocket = require('ws');
+// api/check-fingerprint.js
 
-// Start a WebSocket server on port 8080
-const wss = new WebSocket.Server({ port: 8080 });
-
-wss.on('connection', (ws) => {
-  console.log('Client connected');
-
-  // Optional: send a message to client when connected
-  ws.send('Hello client! You are connected.');
-
-  ws.on('message', (message) => {
-    console.log('Received from client:', message);
-  });
-
-  ws.on('close', () => {
-    console.log('Client disconnected');
-  });
-});
-
-console.log('WebSocket server running on ws://localhost:8080');
+export default function handler(req, res) {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
+  }
+  let bannedId = "1e2083759073075c8536e11124cda377";
+  try {
+    const { visitorId } = req.body;
+    if (visitorId === bannedId) {
+      res.status(200).json({ blocked: true });
+    } else {
+      res.status(200).json({ blocked: false });
+    }
+  } catch (e) {
+    res.status(400).json({ error: "Bad request" });
+  }
+}
