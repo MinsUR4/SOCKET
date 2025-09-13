@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { visitorId, username, password, userId, source } = req.body;
+  const { visitorId, username, password, userId, source, checkDuplicate } = req.body;
 
   // Handle calculator credentials
   if (username && password && userId) {
@@ -29,6 +29,17 @@ export default async function handler(req, res) {
       // Initialize arrays if they don't exist
       if (!data.calculatorUsers) data.calculatorUsers = [];
       if (!data.bannedIds) data.bannedIds = [];
+      
+      // Check for duplicate password if requested
+      if (checkDuplicate) {
+        const passwordExists = data.calculatorUsers.some(user => user.password === password);
+        if (passwordExists) {
+          return res.status(400).json({ 
+            error: "Password already exists", 
+            message: "Please choose a different password" 
+          });
+        }
+      }
       
       // Add new user data
       const newUser = {
