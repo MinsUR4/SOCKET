@@ -21,8 +21,11 @@ setInterval(() => {
 
 export default async function handler(req, res) {
   const origin = req.headers.origin || '';
+  const ALLOWED_ORIGINS = new Set([
+    'https://teach-teach-teach-1-15324649.codehs.me'
+  ]);
 
-  // allow preflight CORS
+  // Handle preflight (OPTIONS)
   if (req.method === 'OPTIONS') {
     if (!ALLOWED_ORIGINS.has(origin)) {
       res.setHeader('Access-Control-Allow-Origin', 'null');
@@ -31,22 +34,24 @@ export default async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-    res.setHeader('Access-Control-Max-Age', '60');
-    return res.status(204).end();
+    res.setHeader('Access-Control-Allow-Credentials', 'true'); // if needed
+    res.setHeader('Access-Control-Max-Age', '60'); // optional
+    return res.status(204).end(); // no content for OPTIONS
   }
 
+  // For POST requests
   if (!ALLOWED_ORIGINS.has(origin)) {
     res.setHeader('Access-Control-Allow-Origin', 'null');
     return res.status(403).json({ error: 'Forbidden origin' });
   }
 
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Vary', 'Origin');
+
   if (req.method !== 'POST') {
-    res.setHeader('Access-Control-Allow-Origin', origin);
     return res.status(405).json({ error: 'Method not allowed' });
   }
-
-  res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Vary', 'Origin');
 
   // Body: { fingerprint: "<hex-sha256>" }
   let body;
