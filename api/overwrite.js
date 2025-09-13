@@ -7,7 +7,7 @@ const ALLOWED_ORIGINS = [
 
 const rateLimitMap = new Map();
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000;
-const MAX_ATTEMPTS = 5;
+const MAX_ATTEMPTS = 300;
 const ACCOUNT_LOCKOUT_TIME = 30 * 60 * 1000;
 const failedAttempts = new Map();
 
