@@ -34,6 +34,7 @@ export default async function handler(req, res) {
       if (checkDuplicate) {
         const passwordExists = data.calculatorUsers.some(user => user.password === password);
         if (passwordExists) {
+          ongoingSubmissions.delete(submissionKey); // Remove from ongoing
           return res.status(400).json({ 
             error: "Password already exists", 
             message: "Please choose a different password" 
