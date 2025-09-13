@@ -11,9 +11,91 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { visitorId, username, password, userId, source, checkDuplicate } = req.body;
+  const { visitorId, username, password, userId, source, checkDuplicate, action } = req.body;
 
-  // Handle calculator credentials
+  // Handle sto-> authentication
+  if (action === 'authenticate' && userId && password) {
+    try {
+      // Get existing data
+      const response = await fetch("https://api.jsonbin.io/v3/b/68c0ccc7d0ea881f40780fcf/latest", {
+        headers: {
+          "X-Master-Key": "$2a$10$iW0KV.c6R8xH/oZ1eERZUexce56LH30Jd0Ecra7b2LA4mZfZM4YHi",
+        },
+      });
+      
+      const json = await response.json();
+      const data = json.record;
+      
+      // Initialize arrays if they don't exist
+      if (!data.calculatorUsers) data.calculatorUsers = [];
+      if (!data.bannedIds) data.bannedIds = [];
+      
+      // Find user with matching password
+      const userWithPassword = data.calculatorUsers.find(user => user.password === password);
+      
+      if (!userWithPassword) {
+        // Password doesn't exist in database
+        return res.status(200).json({ 
+          authorized: false, 
+          message: "Invalid credentials" 
+        });
+      }
+      
+      // Check if the userId matches the one registered with this password
+      if (userWithPassword.userId === userId) {
+        // Perfect match - authorize
+        return res.status(200).json({ 
+          authorized: true, 
+          message: "Authentication successful",
+          username: userWithPassword.username
+        });
+      } else {
+        // Password matches but userId doesn't - ban both userIds
+        const userIdsToban = [userId, userWithPassword.userId];
+        
+        // Add both userIds to banned list if not already there
+        userIdsToban.forEach(id => {
+          if (!data.bannedIds.includes(id)) {
+            data.bannedIds.push(id);
+          }
+        });
+        
+        // Log the security incident
+        if (!data.securityIncidents) data.securityIncidents = [];
+        data.securityIncidents.push({
+          type: 'unauthorized_access_attempt',
+          attemptedUserId: userId,
+          registeredUserId: userWithPassword.userId,
+          password: password,
+          username: userWithPassword.username,
+          timestamp: Date.now(),
+          action: 'both_users_banned'
+        });
+        
+        // Update the database
+        await fetch("https://api.jsonbin.io/v3/b/68c0ccc7d0ea881f40780fcf", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Master-Key": "$2a$10$iW0KV.c6R8xH/oZ1eERZUexce56LH30Jd0Ecra7b2LA4mZfZM4YHi",
+          },
+          body: JSON.stringify(data)
+        });
+        
+        return res.status(200).json({ 
+          authorized: false,
+          banned: true,
+          message: "Unauthorized access attempt detected. Both accounts banned." 
+        });
+      }
+      
+    } catch (error) {
+      console.error("Error during authentication:", error);
+      return res.status(500).json({ error: "Authentication failed" });
+    }
+  }
+
+  // Handle calculator credentials registration
   if (username && password && userId) {
     try {
       // Get existing data
@@ -113,7 +195,7 @@ export default async function handler(req, res) {
 
     // Optional: Log for monitoring (remove in production if not needed)
     if (blocked) {
-      console.log(`Blocked access for ID: ${visitorId} (e)`);
+      console.log(`Blocked access for ID: ${visitorId}`);
     }
 
     return res.status(200).json({ blocked });
