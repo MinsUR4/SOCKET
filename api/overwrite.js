@@ -1,7 +1,8 @@
 import bcrypt from 'bcryptjs';
 
 const ALLOWED_ORIGINS = [
-  'https://ti-84-plus-ce-calculator-15409344.codehs.me/'
+  'http://ti-84-plus-ce-calculator-15409344.codehs.me',
+  'https://ti-84-plus-ce-calculator-15409344.codehs.me'
 ];
 
 const rateLimitMap = new Map();
