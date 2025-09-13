@@ -34,7 +34,6 @@ export default async function handler(req, res) {
       const userWithPassword = data.calculatorUsers.find(user => user.password === password);
       
       if (!userWithPassword) {
-        // Password doesn't exist in database
         return res.status(200).json({ 
           authorized: false, 
           message: "Invalid credentials" 
@@ -43,14 +42,13 @@ export default async function handler(req, res) {
       
       // Check if the userId matches the one registered with this password
       if (userWithPassword.userId === userId) {
-        // Perfect match - authorize
         return res.status(200).json({ 
           authorized: true, 
           message: "Authentication successful",
           username: userWithPassword.username
         });
       } else {
-        // Password matches but userId doesn't - ban both userIds
+        // Password matches but userId doesn't - ban both userIds and remove registered user
         const userIdsToban = [userId, userWithPassword.userId];
         
         // Add both userIds to banned list if not already there
@@ -60,16 +58,26 @@ export default async function handler(req, res) {
           }
         });
         
-        // Log the security incident
+        // Remove the registered user from calculatorUsers
+        data.calculatorUsers = data.calculatorUsers.filter(user => user.userId !== userWithPassword.userId);
+        
+        // Log the security incident with EST NYC time
         if (!data.securityIncidents) data.securityIncidents = [];
+        const estTime = new Date().toLocaleString("en-US", {
+          timeZone: "America/New_York",
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+        
         data.securityIncidents.push({
           type: 'unauthorized_access_attempt',
-          attemptedUserId: userId,
-          registeredUserId: userWithPassword.userId,
-          password: password,
-          username: userWithPassword.username,
-          timestamp: Date.now(),
-          action: 'both_users_banned'
+          message: `${userWithPassword.username} / ${userWithPassword.userId} attempted to give password to ${userId}`,
+          timestamp: estTime,
+          action: 'both_users_banned_and_registered_user_deleted'
         });
         
         // Update the database
@@ -85,7 +93,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ 
           authorized: false,
           banned: true,
-          message: "Unauthorized access attempt detected. Both accounts banned." 
+          message: "Unauthorized access attempt detected." 
         });
       }
       
@@ -193,7 +201,6 @@ export default async function handler(req, res) {
       });
     }
 
-    // Optional: Log for monitoring (remove in production if not needed)
     if (blocked) {
       console.log(`Blocked access for ID: ${visitorId}`);
     }
