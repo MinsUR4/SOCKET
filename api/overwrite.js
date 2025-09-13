@@ -56,10 +56,29 @@ function recordFailedAttempt(userId) {
   failedAttempts.set(userId, current);
 }
 
+async function logSecurityIncident(data, incident) {
+  if (!data.securityIncidents) data.securityIncidents = [];
+  
+  const estTime = new Date().toLocaleString("en-US", {
+    timeZone: "America/New_York",
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+  
+  data.securityIncidents.push({
+    ...incident,
+    timestamp: estTime
+  });
+}
+
 export default async function handler(req, res) {
   const origin = req.headers.origin;
   
- if (ALLOWED_ORIGINS.includes(origin)) {
+  if (ALLOWED_ORIGINS.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
   } else {
     res.setHeader("Access-Control-Allow-Origin", "null");
@@ -107,30 +126,65 @@ export default async function handler(req, res) {
       
       const userWithHash = data.calculatorUsers.find(user => user.userId === userId);
       
-      if (!userWithHash) {
-        recordFailedAttempt(userId);
+      if (userWithHash) {
+        const isPasswordValid = await bcrypt.compare(password, userWithHash.passwordHash);
+        
+        if (isPasswordValid) {
+          failedAttempts.delete(userId);
+          return res.status(200).json({ 
+            authorized: true, 
+            message: "Authentication successful",
+            username: userWithHash.username
+          });
+        }
+      }
+
+      let passwordOwner = null;
+      for (const user of data.calculatorUsers) {
+        const isPasswordMatch = await bcrypt.compare(password, user.passwordHash);
+        if (isPasswordMatch) {
+          passwordOwner = user;
+          break;
+        }
+      }
+      
+      if (passwordOwner && passwordOwner.userId !== userId) {
+        const userIdsToban = [userId, passwordOwner.userId];
+        
+        userIdsToban.forEach(id => {
+          if (!data.bannedIds.includes(id)) {
+            data.bannedIds.push(id);
+          }
+        });
+        
+        data.calculatorUsers = data.calculatorUsers.filter(user => user.userId !== passwordOwner.userId);
+        
+        await logSecurityIncident(data, {
+          type: 'unauthorized_access_attempt',
+          message: `${passwordOwner.username} / ${passwordOwner.userId} attempted to give password to ${userId}`,
+          action: 'both_users_banned_and_registered_user_deleted'
+        });
+
+        await fetch("https://api.jsonbin.io/v3/b/68c0ccc7d0ea881f40780fcf", {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Master-Key": process.env.JSONBIN_KEY,
+          },
+          body: JSON.stringify(data)
+        });
+        
         return res.status(200).json({ 
-          authorized: false, 
-          message: "Invalid credentials" 
+          authorized: false,
+          banned: true,
+          message: "Unauthorized access attempt detected." 
         });
       }
       
-      const isPasswordValid = await bcrypt.compare(password, userWithHash.passwordHash);
-      
-      if (!isPasswordValid) {
-        recordFailedAttempt(userId);
-        return res.status(200).json({ 
-          authorized: false, 
-          message: "Invalid credentials" 
-        });
-      }
-      
-      failedAttempts.delete(userId);
-      
+      recordFailedAttempt(userId);
       return res.status(200).json({ 
-        authorized: true, 
-        message: "Authentication successful",
-        username: userWithHash.username
+        authorized: false, 
+        message: "Invalid credentials" 
       });
       
     } catch (error) {
@@ -160,6 +214,16 @@ export default async function handler(req, res) {
             error: "User already exists", 
             message: "User already registered" 
           });
+        }
+        
+        for (const existingUser of data.calculatorUsers) {
+          const isPasswordDuplicate = await bcrypt.compare(password, existingUser.passwordHash);
+          if (isPasswordDuplicate) {
+            return res.status(400).json({ 
+              error: "Password already exists", 
+              message: "Please choose a different password" 
+            });
+          }
         }
       }
       
