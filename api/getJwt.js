@@ -17,9 +17,12 @@ setInterval(() => {
 }, 60_000);
 
 export default async function handler(req, res) {
+  const ALLOWED_ORIGINS = new Set([
+    'https://teach-teach-teach-1-15324649.codehs.me'
+  ]);
   const origin = req.headers.origin || '';
 
-  // --- CORS Preflight ---
+  // --- Handle preflight OPTIONS request ---
   if (req.method === 'OPTIONS') {
     if (!ALLOWED_ORIGINS.has(origin)) {
       res.setHeader('Access-Control-Allow-Origin', 'null');
@@ -28,9 +31,8 @@ export default async function handler(req, res) {
 
     res.setHeader('Access-Control-Allow-Origin', origin);
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type'); // allow JSON
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Max-Age', '60');
     return res.status(204).end();
   }
 
@@ -40,37 +42,29 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'Forbidden origin' });
   }
 
+  // --- Set CORS headers for actual POST ---
   res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   res.setHeader('Vary', 'Origin');
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  // --- Parse body ---
-  let body;
-  try {
-    body = await new Promise((resolve, reject) => {
-      let s = '';
-      req.on('data', chunk => s += chunk);
-      req.on('end', () => resolve(JSON.parse(s || '{}')));
-      req.on('error', reject);
-    });
-  } catch {
-    return res.status(400).json({ error: 'Invalid JSON' });
-  }
+  // --- Your JWT logic here ---
+  const body = await new Promise((resolve, reject) => {
+    let s = '';
+    req.on('data', chunk => s += chunk);
+    req.on('end', () => resolve(JSON.parse(s || '{}')));
+    req.on('error', reject);
+  });
 
-  const fp = String(body.fingerprint || '');
+  const fp = body.fingerprint;
   if (!fp) return res.status(400).json({ error: 'Missing fingerprint' });
 
-  // --- Create short-lived JWT ---
+  // create short-lived JWT
+  const crypto = require('crypto');
+  const jwt = require('jsonwebtoken');
   const jti = crypto.randomBytes(16).toString('hex');
-  const ttlSeconds = 30;
-  const expiresAt = Date.now() + ttlSeconds * 1000;
-
-  const payload = { fp, jti };
-  const token = jwt.sign(payload, JWT_SECRET, { algorithm: 'HS256', expiresIn: `${ttlSeconds}s`, jwtid: jti });
-
-  usedJtiStore.set(jti, { used: false, expires: expiresAt });
+  const token = jwt.sign({ fp, jti }, process.env.JWT_SECRET || 'replace-me', { algorithm: 'HS256', expiresIn: '30s', jwtid: jti });
 
   return res.status(200).json({ token });
 }
